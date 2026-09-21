@@ -579,3 +579,44 @@ export async function getCustomerHistory(
   if (error) throw new Error(`No se pudo leer el historial: ${error.message}`);
   return (data ?? []) as AppointmentDetail[];
 }
+
+/**
+ * Aprobar una cita que entro como "por confirmar" (cuando el negocio tiene
+ * apagado el confirmado automatico). Manda el WhatsApp de confirmacion que
+ * no salio al reservar y programa los recordatorios.
+ */
+export async function confirmAppointment(code: string): Promise<AppointmentDetail> {
+  const db = supabaseAdmin();
+  const settings = await getSettings();
+  const appointment = await getAppointmentByCode(code);
+
+  if (!appointment) throw new BookingError('No encontramos esa cita.', 'not_found');
+  if (appointment.status !== 'pending') {
+    throw new BookingError('Esa cita ya no esta pendiente de confirmar.', 'invalid');
+  }
+
+  const { error } = await db
+    .from('appointments')
+    .update({ status: 'confirmed' })
+    .eq('id', appointment.id);
+
+  if (error) throw new BookingError(`No se pudo confirmar: ${error.message}`, 'invalid');
+
+  const [{ data: customerRow }, { data: serviceRow }] = await Promise.all([
+    db.from('customers').select('*').eq('id', appointment.customer_id).single(),
+    db.from('services').select('*').eq('id', appointment.service_id).single(),
+  ]);
+
+  if (customerRow && serviceRow) {
+    // Sin confirmado automatico, al reservar no salio ningun mensaje: este es
+    // el momento en que el cliente se entera de que su lugar es suyo.
+    await scheduleAppointmentMessages(
+      { ...(appointment as Appointment), status: 'confirmed' },
+      customerRow as Customer,
+      serviceRow as Service,
+      settings,
+    );
+  }
+
+  return { ...appointment, status: 'confirmed' };
+}

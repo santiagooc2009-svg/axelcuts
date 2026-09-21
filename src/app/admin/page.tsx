@@ -9,6 +9,7 @@ import { Field, inputClass } from '@/components/ui';
 import {
   cancelAction,
   completeAction,
+  confirmAction,
   noShowAction,
   rescheduleAction,
 } from '@/app/admin/actions';
@@ -173,8 +174,16 @@ export default async function AgendaPage({
 
               {open ? (
                 <div className="mt-4 flex flex-wrap items-start gap-2 border-t border-ink-800 pt-4">
+                  {appointment.status === 'pending' ? (
+                    <ActionButton
+                      variant="primary"
+                      label="Confirmar"
+                      pendingLabel="Confirmando…"
+                      action={confirmAction.bind(null, appointment.code)}
+                    />
+                  ) : null}
                   <ActionButton
-                    variant="primary"
+                    variant={appointment.status === 'pending' ? 'secondary' : 'primary'}
                     label="Ya se atendio"
                     pendingLabel="Cerrando…"
                     action={completeAction.bind(null, appointment.code)}

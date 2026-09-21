@@ -6,6 +6,7 @@ import {
   BookingError,
   cancelAppointment,
   completeAppointment,
+  confirmAppointment,
   createWalkIn,
   findOrCreateCustomer,
   markNoShow,
@@ -48,6 +49,17 @@ export async function completeAction(code: string): Promise<ActionResult> {
     revalidatePath('/admin');
     revalidatePath('/admin/clientes');
     return { ok: true, message: 'Cita cerrada y sello agregado.' };
+  } catch (cause) {
+    return fail(cause);
+  }
+}
+
+export async function confirmAction(code: string): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+    await confirmAppointment(code);
+    revalidatePath('/admin');
+    return { ok: true, message: 'Cita confirmada. Se le avisa al cliente.' };
   } catch (cause) {
     return fail(cause);
   }
