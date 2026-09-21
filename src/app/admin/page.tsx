@@ -3,11 +3,26 @@ import Link from 'next/link';
 import ActionButton from '@/components/ActionButton';
 import PushToggle from '@/components/PushToggle';
 import { ButtonLink, Money, StatusPill } from '@/components/ui';
-import { cancelAction, completeAction, noShowAction } from '@/app/admin/actions';
+import AdminForm from '@/components/AdminForm';
+import Collapsible from '@/components/Collapsible';
+import { Field, inputClass } from '@/components/ui';
+import {
+  cancelAction,
+  completeAction,
+  noShowAction,
+  rescheduleAction,
+} from '@/app/admin/actions';
 import { getAppointmentsForRange } from '@/lib/bookings';
-import { getSettings } from '@/lib/data';
+import { getSettings, getStaff } from '@/lib/data';
 import { formatPhone, toWhatsappNumber } from '@/lib/phone';
-import { addDaysISO, formatLongDate, formatTime, todayISO, zonedToUtc } from '@/lib/time';
+import {
+  addDaysISO,
+  dateISO,
+  formatLongDate,
+  formatTime,
+  todayISO,
+  zonedToUtc,
+} from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +32,7 @@ export default async function AgendaPage({
   searchParams: Promise<{ dia?: string }>;
 }) {
   const { dia } = await searchParams;
-  const settings = await getSettings();
+  const [settings, staff] = await Promise.all([getSettings(), getStaff()]);
   const tz = settings.timezone;
 
   const today = todayISO(tz);
@@ -106,9 +121,16 @@ export default async function AgendaPage({
                     <StatusPill status={appointment.status} />
                   </div>
 
-                  <p className="mt-1.5 font-semibold">
-                    {appointment.customer?.name ?? 'Cliente'}
-                  </p>
+                  {appointment.customer ? (
+                    <Link
+                      href={`/admin/clientes/${appointment.customer.loyalty_code}`}
+                      className="mt-1.5 block font-semibold hover:text-copper-300"
+                    >
+                      {appointment.customer.name}
+                    </Link>
+                  ) : (
+                    <p className="mt-1.5 font-semibold">Cliente</p>
+                  )}
 
                   <p className="text-sm text-ink-400">
                     {appointment.service?.name}
@@ -168,6 +190,58 @@ export default async function AgendaPage({
                     action={cancelAction.bind(null, appointment.code)}
                     confirm="¿Cancelar esta cita?"
                   />
+                </div>
+              ) : null}
+
+              {open ? (
+                <div className="mt-4">
+                  <Collapsible label="Mover de hora">
+                    <div className="max-w-sm">
+                      <AdminForm
+                        action={rescheduleAction.bind(null, appointment.code)}
+                        submitLabel="Mover cita"
+                      >
+                        <div className="grid gap-4 sm:grid-cols-2">
+                          <Field label="Nuevo dia">
+                            <input
+                              type="date"
+                              name="date"
+                              className={inputClass}
+                              required
+                              defaultValue={dateISO(appointment.starts_at, tz)}
+                            />
+                          </Field>
+                          <Field label="Nueva hora">
+                            <input
+                              type="time"
+                              name="time"
+                              className={inputClass}
+                              required
+                              step={300}
+                              defaultValue={formatTime(appointment.starts_at, tz)}
+                            />
+                          </Field>
+                        </div>
+
+                        {staff.length > 0 ? (
+                          <Field label="Barbero">
+                            <select
+                              name="staffId"
+                              className={inputClass}
+                              defaultValue={appointment.staff_id ?? ''}
+                            >
+                              <option value="">Sin asignar</option>
+                              {staff.map((member) => (
+                                <option key={member.id} value={member.id}>
+                                  {member.name}
+                                </option>
+                              ))}
+                            </select>
+                          </Field>
+                        ) : null}
+                      </AdminForm>
+                    </div>
+                  </Collapsible>
                 </div>
               ) : null}
             </article>

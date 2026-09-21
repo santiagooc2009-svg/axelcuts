@@ -13,6 +13,7 @@ import {
   addDaysISO, diffDaysISO, hhmmToMinutes, minutesToHHMM,
 } from '../src/lib/time.ts';
 import { computeSlots } from '../src/lib/slots.ts';
+import { customerSearchFilter } from '../src/lib/search.ts';
 
 let fails = 0;
 
@@ -155,6 +156,19 @@ const dia = [{ staffId: null, open: h('10:00'), close: h('14:00') }];
   });
   eq('bloqueo que viene de ayer se come la manana', slots.map((s) => minutesToHHMM(s.start)).join(' '), '11:00 12:00 13:00');
 }
+
+// ---------------------------------------------------------------------------
+console.log('\nBusqueda de clientes');
+eq('nombre simple', customerSearchFilter('Juan'), 'name.ilike.%Juan%');
+eq('con acentos', customerSearchFilter('Ramirez Nunez'), 'name.ilike.%Ramirez Nunez%');
+eq('telefono', customerSearchFilter('5512345678'), 'name.ilike.%5512345678%,phone.ilike.%5512345678%');
+eq('telefono con formato', customerSearchFilter('55 1234'), 'name.ilike.%55 1234%,phone.ilike.%551234%');
+eq('pocos digitos no buscan telefono', customerSearchFilter('123'), 'name.ilike.%123%');
+eq('vacio no filtra', customerSearchFilter('   '), 'null');
+// Lo importante: una coma o un parentesis no pueden cambiar la consulta.
+eq('coma neutralizada', customerSearchFilter('Juan,phone.ilike.*'), 'name.ilike.%Juanphoneilike%');
+eq('parentesis neutralizados', customerSearchFilter('a)or(id.gt.0'), 'name.ilike.%aoridgt0%');
+eq('solo simbolos no filtra', customerSearchFilter('(),*'), 'null');
 
 // ---------------------------------------------------------------------------
 console.log(fails === 0 ? '\nTodo bien.\n' : `\n${fails} verificaciones fallaron.\n`);

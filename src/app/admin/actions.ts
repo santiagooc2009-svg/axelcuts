@@ -9,6 +9,7 @@ import {
   createWalkIn,
   findOrCreateCustomer,
   markNoShow,
+  rescheduleAppointment,
 } from '@/lib/bookings';
 import { adjustStamps, loyaltyUrl, redeemReward } from '@/lib/loyalty';
 import { markSent } from '@/lib/messaging/outbox';
@@ -183,6 +184,82 @@ export async function markSentAction(messageId: string): Promise<ActionResult> {
     await markSent(messageId);
     revalidatePath('/admin/mensajes');
     return { ok: true };
+  } catch (cause) {
+    return fail(cause);
+  }
+}
+
+/** Mover una cita de dia u hora desde el panel. */
+export async function rescheduleAction(
+  code: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+
+    const date = String(formData.get('date') ?? '');
+    const time = String(formData.get('time') ?? '');
+    if (!date || !time) return { ok: false, message: 'Falta la fecha o la hora.' };
+
+    const { zonedToUtc } = await import('@/lib/time');
+    const { getSettings } = await import('@/lib/data');
+    const settings = await getSettings();
+
+    const rawStaff = formData.get('staffId');
+    // `null` en el campo = "sin asignar"; ausente = no lo toques.
+    const staffId = rawStaff === null ? undefined : (String(rawStaff) || null);
+
+    await rescheduleAppointment(
+      code,
+      zonedToUtc(date, time, settings.timezone).toISOString(),
+      staffId,
+    );
+
+    revalidatePath('/admin');
+    return { ok: true, message: 'Cita movida. Se reprograman los recordatorios.' };
+  } catch (cause) {
+    return fail(cause);
+  }
+}
+
+/** Editar los datos de un cliente (nombre, telefono, notas, avisos). */
+export async function updateCustomerAction(
+  customerId: string,
+  formData: FormData,
+): Promise<ActionResult> {
+  try {
+    await requireAdmin();
+
+    const name = String(formData.get('name') ?? '').trim();
+    const rawPhone = String(formData.get('phone') ?? '').trim();
+    const notes = String(formData.get('notes') ?? '').trim();
+    const optIn = formData.get('whatsapp_opt_in') === 'on';
+
+    if (name.length < 2) return { ok: false, message: 'Escribe el nombre.' };
+
+    const { normalizePhone } = await import('@/lib/phone');
+    const phone = normalizePhone(rawPhone);
+    if (!phone) return { ok: false, message: 'El telefono no parece valido.' };
+
+    const { supabaseAdmin } = await import('@/lib/supabase/admin');
+    const { error } = await supabaseAdmin()
+      .from('customers')
+      .update({ name, phone, notes: notes || null, whatsapp_opt_in: optIn })
+      .eq('id', customerId);
+
+    if (error) {
+      // 23505 = ese telefono ya es de otra ficha.
+      if (error.code === '23505') {
+        return {
+          ok: false,
+          message: 'Ese telefono ya esta en otra ficha de cliente.',
+        };
+      }
+      throw new Error(error.message);
+    }
+
+    revalidatePath('/admin/clientes');
+    return { ok: true, message: 'Datos actualizados.' };
   } catch (cause) {
     return fail(cause);
   }

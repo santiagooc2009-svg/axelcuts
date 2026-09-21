@@ -5,6 +5,7 @@ import { ButtonLink, inputClass } from '@/components/ui';
 import { redeemAction, stampAction } from '@/app/admin/actions';
 import { getSettings } from '@/lib/data';
 import { formatPhone, toWhatsappNumber } from '@/lib/phone';
+import { customerSearchFilter } from '@/lib/search';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { formatLongDate } from '@/lib/time';
 import type { Customer } from '@/types/db';
@@ -28,15 +29,8 @@ export default async function ClientesPage({
     .order('last_visit_at', { ascending: false, nullsFirst: false })
     .limit(100);
 
-  if (search) {
-    // Busca por nombre o por telefono. El `%` va escapado por PostgREST.
-    const digits = search.replace(/\D/g, '');
-    query = query.or(
-      digits.length >= 4
-        ? `name.ilike.%${search}%,phone.ilike.%${digits}%`
-        : `name.ilike.%${search}%`,
-    );
-  }
+  const filter = customerSearchFilter(search);
+  if (filter) query = query.or(filter);
 
   const { data } = await query;
   const customers = (data ?? []) as Customer[];
@@ -85,7 +79,13 @@ export default async function ClientesPage({
             <article key={customer.id} className="card p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="font-semibold">{customer.name}</p>
+                  <Link
+                    href={`/admin/clientes/${customer.loyalty_code}`}
+                    className="font-semibold hover:text-copper-300"
+                  >
+                    {customer.name}
+                  </Link>
+                  <br />
                   <a
                     href={`https://wa.me/${toWhatsappNumber(customer.phone)}`}
                     className="text-sm text-copper-300 hover:text-copper-400"
@@ -126,6 +126,12 @@ export default async function ClientesPage({
                   label="Poner sello"
                   action={stampAction.bind(null, customer.id)}
                 />
+                <Link
+                  href={`/admin/clientes/${customer.loyalty_code}`}
+                  className="inline-flex items-center rounded-lg border border-ink-700 px-3 py-1.5 text-sm font-semibold text-ink-100 hover:border-ink-600"
+                >
+                  Ver ficha
+                </Link>
                 {complete ? (
                   <ActionButton
                     variant="primary"

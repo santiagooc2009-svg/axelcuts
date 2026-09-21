@@ -30,6 +30,7 @@ export default async function NuevaCitaPage() {
               {services.map((service) => (
                 <option key={service.id} value={service.id}>
                   {service.name} — {service.duration_min} min
+                  {service.active ? '' : ' (oculto)'}
                 </option>
               ))}
             </select>

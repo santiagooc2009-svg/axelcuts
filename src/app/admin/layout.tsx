@@ -16,6 +16,7 @@ const LINKS = [
   { href: '/admin', label: 'Agenda' },
   { href: '/admin/clientes', label: 'Clientes' },
   { href: '/admin/mensajes', label: 'Mensajes' },
+  { href: '/admin/ajustes', label: 'Ajustes' },
 ];
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

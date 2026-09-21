@@ -15,6 +15,8 @@ Hecha con Next.js (App Router) + Supabase, para desplegar en Vercel.
 - Las citas del dia, ordenadas por hora, con telefono a un toque de WhatsApp.
 - Tres botones por cita: *ya se atendio* (cierra y sella la tarjeta), *no
   llego* y *cancelar*.
+- Mover una cita de dia, hora o barbero sin perder su link: el cliente sigue
+  viendo la misma cita y los recordatorios se reprograman solos.
 - Alta de citas desde el mostrador para quien llama o llega sin reservar.
 - Navegacion por dia y total cobrado del dia.
 
@@ -28,6 +30,8 @@ Hecha con Next.js (App Router) + Supabase, para desplegar en Vercel.
 - El sello se pone solo al cerrar una cita, o a mano desde el panel.
 - Al completar la tarjeta, el cliente recibe el aviso y el panel muestra el
   boton de canjear.
+- Ficha por cliente: historial de citas, cuanto ha gastado, movimientos de la
+  tarjeta, notas privadas y el interruptor de "no le escriban por WhatsApp".
 
 **3. Avisos por WhatsApp**
 
@@ -40,7 +44,22 @@ Hecha con Next.js (App Router) + Supabase, para desplegar en Vercel.
   - **`cloud_api`** — envio automatico con la API de Meta. Requiere cuenta de
     WhatsApp Business, numero verificado y plantillas aprobadas.
 
-**4. Instalable en la pantalla principal**
+**4. Configuracion desde el panel** — `/admin/ajustes`
+
+- **Servicios**: nombre, descripcion, duracion, precio y orden. Se ocultan sin
+  borrarlos (un servicio con historial no se puede eliminar, y el panel lo
+  explica en vez de fallar).
+- **Equipo**: quien atiende, activar/desactivar y que servicios da cada quien.
+- **Horario**: la semana completa, con varios bloques por dia para cuando se
+  cierra a comer, y horario propio por persona que manda sobre el general.
+- **Bloqueos**: vacaciones, festivos o un rato libre, para todo el negocio o
+  para una sola persona.
+- **Ajustes**: nombre, telefono, direccion, zona horaria, cada cuanto se
+  ofrecen horarios, anticipacion minima, horizonte de reserva, ventana de
+  cancelacion, cuando salen los recordatorios y la meta y el premio de la
+  tarjeta.
+
+**5. Instalable en la pantalla principal**
 
 - PWA con manifiesto e iconos. En Android aparece el boton *Instalar*; en
   iPhone se explica el gesto (Compartir → Agregar a inicio).
@@ -48,7 +67,7 @@ Hecha con Next.js (App Router) + Supabase, para desplegar en Vercel.
 - Notificaciones push: al dueño cuando alguien reserva o cancela, y al
   cliente antes de su cita.
 
-**Extra: pagina publica de reservas** — `/` y `/reservar`
+**Extra (fase 2): pagina publica de reservas** — `/` y `/reservar`
 
 Por si quieres que la gente aparte sola desde Instagram o el link de la
 tarjeta. Si no la usas, no estorba: el panel funciona igual.
@@ -130,10 +149,15 @@ src/
 │   ├── tarjeta/[code]/       tarjeta de fidelidad del cliente
 │   ├── admin/                el panel (protegido por middleware)
 │   │   ├── page.tsx          agenda del dia
-│   │   ├── clientes/         lista, sellos y alta de tarjetas
+│   │   ├── clientes/         lista, ficha, sellos y alta de tarjetas
 │   │   ├── nueva-cita/       alta desde el mostrador
 │   │   ├── mensajes/         bandeja de WhatsApp pendientes
-│   │   └── actions.ts        Server Actions (todas revalidan sesion)
+│   │   ├── ajustes/          datos del negocio y fidelidad
+│   │   ├── servicios/        que se ofrece, duracion y precio
+│   │   ├── equipo/           quien atiende y que hace cada quien
+│   │   ├── horario/          semana y bloqueos
+│   │   ├── actions.ts        operacion del dia a dia
+│   │   └── config-actions.ts configuracion del negocio
 │   └── api/
 │       ├── availability/     huecos libres de un dia
 │       ├── bookings/         crear y cancelar citas
@@ -141,6 +165,7 @@ src/
 │       └── push/subscribe/   alta de notificaciones
 ├── lib/
 │   ├── slots.ts              calculo puro de huecos (probado en npm run check)
+│   ├── search.ts             filtro de busqueda de clientes, saneado
 │   ├── availability.ts       lo anterior + base de datos y zona horaria
 │   ├── bookings.ts           crear, cancelar, cerrar citas
 │   ├── loyalty.ts            sellos, premios y ajustes
@@ -165,30 +190,28 @@ src/
   visita real.
 - **El service worker no cachea nada.** Una agenda mostrando huecos viejos es
   peor que una agenda que pide conexion.
+- **Nada se borra si tiene historial.** Un servicio con citas pasadas se
+  oculta, no se elimina; una persona del equipo se desactiva. El historial de
+  un cliente tiene que seguir teniendo nombres.
+- **El texto de busqueda se sanea antes de entrar al filtro de PostgREST**,
+  donde la coma separa condiciones. Hay pruebas de eso en `npm run check`.
 
 ### Cambiar cosas del negocio
 
-Por ahora, desde el SQL Editor de Supabase (tabla `settings`):
+Todo desde `/admin/ajustes`: servicios, equipo, horario, bloqueos, datos del
+negocio, recordatorios y la tarjeta de fidelidad. El `seed.sql` solo deja un
+punto de partida para no arrancar con la pantalla vacia.
 
-| Campo | Que hace |
-|---|---|
-| `slot_minutes` | cada cuanto se ofrecen horarios (15 min por omision) |
-| `min_lead_minutes` | anticipacion minima para reservar en linea |
-| `max_horizon_days` | que tan lejos se puede reservar |
-| `cancel_window_hours` | hasta cuando puede cancelar solo el cliente |
-| `loyalty_goal` / `loyalty_reward` | sellos para el premio y cual es |
-| `reminder_hours` | cuando salen los recordatorios, ej. `{24,2}` |
-
-Servicios, barberos y horarios se editan en las tablas `services`, `staff` y
-`business_hours`. Los cierres por vacaciones o festivos van en `time_off`.
+Lo unico que sigue en variables de entorno es el modo de WhatsApp y las llaves
+de las notificaciones, porque son secretos del servidor y no ajustes del
+negocio.
 
 ---
 
 ## Pendientes conocidos
 
-- Los ajustes, servicios y horarios todavia se editan desde Supabase y no
-  desde el panel.
+- La cara publica (portada, catalogo, marca) es la fase 2; lo que hay ahora
+  es funcional pero minimo.
 - En modo `cloud_api`, los recordatorios que caen fuera de la ventana de 24 h
   de Meta necesitan una plantilla aprobada; el codigo manda texto libre y, si
   Meta lo rechaza, el mensaje queda en `/admin/mensajes` para mandarlo a mano.
-- No hay reagendar: hoy se cancela y se crea de nuevo.

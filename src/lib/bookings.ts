@@ -475,3 +475,107 @@ export async function createWalkIn(input: {
 
   return appointment;
 }
+
+/**
+ * Mover una cita de hora. Se reusa la misma cita (mismo codigo y mismo link
+ * que el cliente ya tiene) en vez de cancelar y crear otra, para que el
+ * mensaje que recibio siga sirviendo.
+ *
+ * Los recordatorios viejos se descartan y se vuelven a programar sobre la
+ * hora nueva; si no, llegaria un "tu cita es manana" con la hora vieja.
+ */
+export async function rescheduleAppointment(
+  code: string,
+  newStartsAt: string,
+  newStaffId?: string | null,
+): Promise<AppointmentDetail> {
+  const db = supabaseAdmin();
+  const settings = await getSettings();
+  const appointment = await getAppointmentByCode(code);
+
+  if (!appointment) throw new BookingError('No encontramos esa cita.', 'not_found');
+  if (appointment.status === 'cancelled' || appointment.status === 'completed') {
+    throw new BookingError('Esa cita ya esta cerrada. Crea una nueva.', 'invalid');
+  }
+
+  const startsAt = new Date(newStartsAt);
+  if (Number.isNaN(startsAt.getTime())) {
+    throw new BookingError('La fecha y hora no son validas.', 'invalid');
+  }
+
+  const duration = appointment.service?.duration_min ?? 30;
+  const endsAt = new Date(startsAt.getTime() + duration * 60_000);
+  const staffId = newStaffId === undefined ? appointment.staff_id : newStaffId;
+
+  const { error } = await db
+    .from('appointments')
+    .update({
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+      staff_id: staffId,
+    })
+    .eq('id', appointment.id);
+
+  if (error) {
+    if (error.code === '23P01') {
+      throw new BookingError(
+        'A esa hora ya hay otra cita encimada del mismo barbero.',
+        'taken',
+      );
+    }
+    throw new BookingError(`No se pudo mover la cita: ${error.message}`, 'invalid');
+  }
+
+  await dropPendingMessages(appointment.id, 'la cita se movio de hora');
+
+  if (appointment.customer) {
+    const { data: customerRow } = await db
+      .from('customers')
+      .select('*')
+      .eq('id', appointment.customer_id)
+      .single();
+
+    const { data: serviceRow } = await db
+      .from('services')
+      .select('*')
+      .eq('id', appointment.service_id)
+      .single();
+
+    if (customerRow && serviceRow) {
+      await scheduleAppointmentMessages(
+        {
+          ...(appointment as Appointment),
+          starts_at: startsAt.toISOString(),
+          ends_at: endsAt.toISOString(),
+          staff_id: staffId,
+        },
+        customerRow as Customer,
+        serviceRow as Service,
+        settings,
+      );
+    }
+  }
+
+  return { ...appointment, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() };
+}
+
+/** Historial de visitas de una persona, lo mas reciente primero. */
+export async function getCustomerHistory(
+  customerId: string,
+  limit = 30,
+): Promise<AppointmentDetail[]> {
+  const { data, error } = await supabaseAdmin()
+    .from('appointments')
+    .select(
+      `*,
+       service:services (id, name, duration_min, price_cents),
+       staff:staff (id, name),
+       customer:customers (id, name, phone, loyalty_code, stamps)`,
+    )
+    .eq('customer_id', customerId)
+    .order('starts_at', { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`No se pudo leer el historial: ${error.message}`);
+  return (data ?? []) as AppointmentDetail[];
+}
