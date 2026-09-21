@@ -1,0 +1,67 @@
+@import 'tailwindcss';
+
+/*
+  Paleta de barberia: carbon, hueso y un cobre calido para lo accionable.
+  Un solo acento: si todo resalta, nada resalta.
+*/
+@theme {
+  --color-ink-950: #0b0b0c;
+  --color-ink-900: #121214;
+  --color-ink-850: #17171a;
+  --color-ink-800: #1e1e22;
+  --color-ink-700: #2a2a30;
+  --color-ink-600: #3a3a42;
+  --color-ink-400: #8b8b96;
+  --color-ink-300: #b4b4bd;
+  --color-ink-100: #ececef;
+
+  --color-copper-500: #c98342;
+  --color-copper-400: #dd9a58;
+  --color-copper-300: #eab782;
+
+  --color-success-500: #3f9d6d;
+  --color-danger-500: #c8553d;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
+  --radius-card: 14px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+/* Anillo de foco visible en todo lo que se pueda tocar con teclado. */
+:focus-visible {
+  outline: 2px solid var(--color-copper-400);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@utility card {
+  background: var(--color-ink-900);
+  border: 1px solid var(--color-ink-800);
+  border-radius: var(--radius-card);
+}
